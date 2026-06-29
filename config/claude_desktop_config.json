@@ -1,0 +1,16 @@
+{
+  "_comment": "Add this to your Claude Desktop config at ~/Library/Application Support/Claude/claude_desktop_config.json",
+  "mcpServers": {
+    "gam360-revenue": {
+      "command": "python",
+      "args": ["/absolute/path/to/gam360-pipeline/mcp_server/server.py"],
+      "env": {
+        "GAM_NETWORK_CODE": "YOUR_NETWORK_CODE_HERE",
+        "GAM_CREDENTIALS_PATH": "/absolute/path/to/gam360-pipeline/config/googleads.yaml",
+        "DATABASE_URL": "postgresql://user:password@localhost:5432/gam_revenue",
+        "GAM_API_VERSION": "v202602",
+        "ANOMALY_THRESHOLD_PCT": "20"
+      }
+    }
+  }
+}
