@@ -30,6 +30,10 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
+  const [datePreset, setDatePreset] = useState("yesterday");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   useEffect(() => {
     async function load() {
       const data = await getReportHistory();
@@ -89,7 +93,7 @@ export default function ReportsPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Date Preset</Label>
-              <Select defaultValue="yesterday">
+              <Select value={datePreset} onValueChange={setDatePreset}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select preset" />
                 </SelectTrigger>
@@ -106,11 +110,25 @@ export default function ReportsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Start Date</Label>
-                <Input type="date" disabled />
+                <Input 
+                  type="date" 
+                  value={startDate} 
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setDatePreset("custom");
+                  }} 
+                />
               </div>
               <div className="space-y-2">
                 <Label>End Date</Label>
-                <Input type="date" disabled />
+                <Input 
+                  type="date" 
+                  value={endDate} 
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setDatePreset("custom");
+                  }} 
+                />
               </div>
             </div>
 
