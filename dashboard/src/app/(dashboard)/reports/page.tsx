@@ -93,7 +93,7 @@ export default function ReportsPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Date Preset</Label>
-              <Select value={datePreset} onValueChange={setDatePreset}>
+              <Select value={datePreset} onValueChange={(val) => setDatePreset(val || "")}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select preset" />
                 </SelectTrigger>
