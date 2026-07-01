@@ -46,6 +46,7 @@ export default function ReportsPage() {
   const handleGenerate = async () => {
     setGenerating(true);
     const result = await triggerReportGeneration({});
+    
     setHistory((prev) => [
       {
         id: result.id,
@@ -56,8 +57,26 @@ export default function ReportsPage() {
       },
       ...prev,
     ]);
+
+    // Simulate transition to Running state
     setTimeout(() => {
       setGenerating(false);
+      setHistory((prev) =>
+        prev.map((item) =>
+          item.id === result.id ? { ...item, status: "Running" } : item
+        )
+      );
+
+      // Simulate transition to Completed state
+      setTimeout(() => {
+        setHistory((prev) =>
+          prev.map((item) =>
+            item.id === result.id
+              ? { ...item, status: "Completed", rows: Math.floor(Math.random() * 5000) + 100 }
+              : item
+          )
+        );
+      }, 3000);
     }, 1500);
   };
 
