@@ -40,7 +40,14 @@ export function Header({ dataDate }: HeaderProps) {
           Refresh
         </Button>
 
-        <Button size="sm" className="hidden sm:flex h-9 bg-indigo-600 hover:bg-indigo-700 text-white">
+        <Button 
+          size="sm" 
+          className="hidden sm:flex h-9 bg-indigo-600 hover:bg-indigo-700 text-white"
+          onClick={() => {
+            const url = dataDate ? `/api/export?date=${dataDate}` : "/api/export";
+            window.location.href = url;
+          }}
+        >
           <Download className="mr-2 h-4 w-4" />
           Generate Report
         </Button>
