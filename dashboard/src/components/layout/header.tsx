@@ -1,12 +1,21 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Moon, Sun, User, Calendar as CalendarIcon, RefreshCw, Download } from "lucide-react";
-import { format } from "date-fns";
+import { Moon, Sun, User, Calendar as CalendarIcon, RefreshCw, Download, Database } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 
-export function Header() {
+interface HeaderProps {
+  /** The actual date the displayed data is from (from Postgres MAX(report_date)) */
+  dataDate?: string | null;
+}
+
+export function Header({ dataDate }: HeaderProps) {
   const { setTheme, theme } = useTheme();
+
+  const displayDate = dataDate
+    ? format(parseISO(dataDate), "MMM dd, yyyy")
+    : format(new Date(), "MMM dd, yyyy");
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b bg-background px-6 shadow-sm">
@@ -17,9 +26,13 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" className="hidden sm:flex h-9 border-dashed">
-          <CalendarIcon className="mr-2 h-4 w-4" />
-          {format(new Date(), "MMM dd, yyyy")}
+        <Button variant="outline" size="sm" className="hidden sm:flex h-9 border-dashed" title={dataDate ? `Showing data as of ${displayDate}` : "Using today's date"}>
+          {dataDate ? (
+            <Database className="mr-2 h-4 w-4 text-emerald-500" />
+          ) : (
+            <CalendarIcon className="mr-2 h-4 w-4" />
+          )}
+          {dataDate ? `Data as of: ${displayDate}` : displayDate}
         </Button>
         
         <Button variant="outline" size="sm" className="hidden sm:flex h-9">

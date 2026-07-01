@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getRevenueByApp } from "@/services/api";
+import { getRevenueByApp, getLatestReportDate } from "@/services/api";
 import { AppMetrics } from "@/types";
 import {
   Table,
@@ -30,7 +30,9 @@ export default function ApplicationsPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const data = await getRevenueByApp();
+      const latestDate = await getLatestReportDate();
+      const dateToQuery = latestDate || new Date().toISOString().split("T")[0];
+      const data = await getRevenueByApp(dateToQuery);
       setApps(data);
       setLoading(false);
     }

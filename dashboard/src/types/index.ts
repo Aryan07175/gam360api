@@ -19,7 +19,7 @@ export interface NetworkTotal {
   total_clicks: number;
   total_ad_requests: number;
   total_revenue_usd: number;
-  avg_fill_rate: number;
+  avg_fill_rate: number | null;
   avg_ecpm: number;
   top_app_name: string;
   top_app_revenue: number;

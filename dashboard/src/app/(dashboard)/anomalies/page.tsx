@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAnomalies } from "@/services/api";
+import { getAnomalies, getLatestReportDate } from "@/services/api";
 import { Anomaly } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,9 @@ export default function AnomaliesPage() {
 
   useEffect(() => {
     async function load() {
-      const data = await getAnomalies();
+      const latestDate = await getLatestReportDate();
+      const dateToQuery = latestDate || new Date().toISOString().split("T")[0];
+      const data = await getAnomalies(dateToQuery);
       setAnomalies(data);
       setLoading(false);
     }

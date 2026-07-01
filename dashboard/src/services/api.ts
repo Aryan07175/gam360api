@@ -12,10 +12,41 @@ import {
 // Connect to Neon PostgreSQL
 const sql = postgres(process.env.DATABASE_URL || "", { ssl: "require" });
 
-// We simulate a fallback for safety if DB isn't configured during build
+// Safety check: is the DB configured at all?
 const isConfigured = !!process.env.DATABASE_URL;
 
-export async function getNetworkTotal(date: string = "2026-06-30"): Promise<NetworkTotal> {
+/**
+ * Get the most recent date that has actual revenue data in Postgres.
+ * This prevents the dashboard from showing today's date when GAM data
+ * typically lags by ~1 day.
+ */
+export async function getLatestReportDate(): Promise<string | null> {
+  if (!isConfigured) return null;
+
+  try {
+    const result = await sql`
+      SELECT MAX(report_date) AS latest_date
+      FROM gam_revenue
+      WHERE revenue_usd IS NOT NULL
+    `;
+
+    if (result.length === 0 || !result[0].latest_date) {
+      return null;
+    }
+
+    return new Date(result[0].latest_date).toISOString().split("T")[0];
+  } catch (error) {
+    console.error("Failed to fetch latest report date:", error);
+    return null;
+  }
+}
+
+/**
+ * Fetch the network-wide totals for a specific date.
+ * Returns null when no data exists for the requested date (instead of
+ * silently falling back to mock data).
+ */
+export async function getNetworkTotal(date: string): Promise<NetworkTotal | null> {
   if (!isConfigured) return getFallbackNetworkTotal();
 
   try {
@@ -23,18 +54,27 @@ export async function getNetworkTotal(date: string = "2026-06-30"): Promise<Netw
       SELECT
         MIN(report_date) AS report_date,
         COUNT(DISTINCT ad_unit_name) AS app_count,
-        SUM(impressions) AS total_impressions,
-        SUM(clicks) AS total_clicks,
-        SUM(ad_requests) AS total_ad_requests,
-        SUM(revenue_usd) AS total_revenue_usd,
-        AVG(fill_rate_pct) AS avg_fill_rate,
-        AVG(ecpm_usd) AS avg_ecpm
+        COALESCE(SUM(impressions), 0) AS total_impressions,
+        COALESCE(SUM(clicks), 0) AS total_clicks,
+        COALESCE(SUM(ad_requests), 0) AS total_ad_requests,
+        COALESCE(SUM(revenue_usd), 0) AS total_revenue_usd,
+        CASE
+          WHEN COALESCE(SUM(ad_requests), 0) > 0
+          THEN ROUND(CAST(SUM(impressions) AS NUMERIC) / SUM(ad_requests) * 100, 2)
+          ELSE NULL
+        END AS avg_fill_rate,
+        CASE
+          WHEN COALESCE(SUM(impressions), 0) > 0
+          THEN ROUND(CAST(SUM(revenue_usd) AS NUMERIC) / SUM(impressions) * 1000, 6)
+          ELSE NULL
+        END AS avg_ecpm
       FROM gam_revenue
       WHERE report_date = ${date}
     `;
 
-    if (result.length === 0 || !result[0].app_count) {
-      return getFallbackNetworkTotal();
+    if (result.length === 0 || !result[0].app_count || Number(result[0].app_count) === 0) {
+      // No data for this date — return null so UI can show "No data" state
+      return null;
     }
 
     const row = result[0];
@@ -44,7 +84,8 @@ export async function getNetworkTotal(date: string = "2026-06-30"): Promise<Netw
       SELECT ad_unit_name, revenue_usd
       FROM gam_revenue
       WHERE report_date = ${date}
-      ORDER BY revenue_usd DESC NULLS LAST
+        AND revenue_usd IS NOT NULL
+      ORDER BY revenue_usd DESC
       LIMIT 1
     `;
 
@@ -55,18 +96,18 @@ export async function getNetworkTotal(date: string = "2026-06-30"): Promise<Netw
       total_clicks: Number(row.total_clicks),
       total_ad_requests: Number(row.total_ad_requests),
       total_revenue_usd: Number(row.total_revenue_usd),
-      avg_fill_rate: Number(row.avg_fill_rate),
-      avg_ecpm: Number(row.avg_ecpm),
+      avg_fill_rate: row.avg_fill_rate != null ? Number(row.avg_fill_rate) : null,
+      avg_ecpm: row.avg_ecpm != null ? Number(row.avg_ecpm) : 0,
       top_app_name: topAppResult.length > 0 ? topAppResult[0].ad_unit_name : "N/A",
       top_app_revenue: topAppResult.length > 0 ? Number(topAppResult[0].revenue_usd) : 0,
     };
   } catch (error) {
     console.error("Failed to fetch network total:", error);
-    return getFallbackNetworkTotal();
+    return null;
   }
 }
 
-export async function getRevenueByApp(date: string = "2026-06-30"): Promise<AppMetrics[]> {
+export async function getRevenueByApp(date: string): Promise<AppMetrics[]> {
   if (!isConfigured) return getFallbackRevenueByApp();
 
   try {
@@ -91,7 +132,7 @@ export async function getRevenueByApp(date: string = "2026-06-30"): Promise<AppM
       fill_rate_pct: Number(r.fill_rate_pct),
       ctr_pct: Number(r.ctr_pct),
       ecpm_usd: Number(r.ecpm_usd),
-      report_date: new Date(r.report_date).toISOString().split('T')[0],
+      report_date: new Date(r.report_date).toISOString().split("T")[0],
       network_code: r.network_code,
     }));
   } catch (error) {
@@ -106,17 +147,18 @@ export async function getRevenueTrend(days: number = 30): Promise<TrendDataPoint
   try {
     const rows = await sql`
       SELECT report_date,
-             SUM(revenue_usd) as revenue_usd,
-             SUM(impressions) as impressions,
+             COALESCE(SUM(revenue_usd), 0) as revenue_usd,
+             COALESCE(SUM(impressions), 0) as impressions,
              AVG(ecpm_usd) as ecpm_usd
       FROM gam_revenue
+      WHERE revenue_usd IS NOT NULL
       GROUP BY report_date
       ORDER BY report_date DESC
       LIMIT ${days}
     `;
 
     return rows.map((r: any) => ({
-      report_date: new Date(r.report_date).toISOString().split('T')[0],
+      report_date: new Date(r.report_date).toISOString().split("T")[0],
       revenue_usd: Number(r.revenue_usd),
       impressions: Number(r.impressions),
       ecpm_usd: Number(r.ecpm_usd),
@@ -127,11 +169,10 @@ export async function getRevenueTrend(days: number = 30): Promise<TrendDataPoint
   }
 }
 
-export async function getAnomalies(date: string = "2026-06-30"): Promise<Anomaly[]> {
+export async function getAnomalies(date: string): Promise<Anomaly[]> {
   if (!isConfigured) return getFallbackAnomalies();
 
   try {
-    // 7 day lookback
     const rows = await sql`
       WITH recent AS (
           SELECT ad_unit_name,
@@ -167,7 +208,7 @@ export async function getAnomalies(date: string = "2026-06-30"): Promise<Anomaly
         avg_revenue_7d: Number(r.avg_revenue_7d),
         drop_pct: dropPct,
         severity: dropPct > 50 ? "High" : dropPct > 30 ? "Medium" : "Low",
-        confidence: 0.9 + (Math.random() * 0.1),
+        confidence: 0.9 + Math.random() * 0.1,
       };
     });
   } catch (error) {
@@ -177,35 +218,48 @@ export async function getAnomalies(date: string = "2026-06-30"): Promise<Anomaly
 }
 
 export async function getReportHistory(): Promise<ReportHistoryItem[]> {
-  return getFallbackReportHistory(); // Usually managed by task queue in Postgres, returning fallback
+  return getFallbackReportHistory();
 }
 
-export async function triggerReportGeneration(config: any): Promise<{ id: string; status: string }> {
+export async function triggerReportGeneration(
+  config: any
+): Promise<{ id: string; status: string }> {
   return { id: Math.random().toString(36).substring(7), status: "Queued" };
 }
 
 // ---------------------------------------------------------
-// Fallback Generators (Safety mechanism if no DB connected)
+// Fallback Generators (only used when DATABASE_URL is unset)
 // ---------------------------------------------------------
 function getFallbackNetworkTotal(): NetworkTotal {
   return {
     report_date: "2026-06-30",
     app_count: 79,
     total_impressions: 102930,
-    total_clicks: 450,
-    total_ad_requests: 120500,
-    total_revenue_usd: 1245.5,
-    avg_fill_rate: 85.4,
-    avg_ecpm: 12.1,
+    total_clicks: 2,
+    total_ad_requests: 0,
+    total_revenue_usd: 0.427252,
+    avg_fill_rate: null,
+    avg_ecpm: 0.004151,
     top_app_name: "JBM_Aria_768x1216",
-    top_app_revenue: 345.2,
+    top_app_revenue: 0.098196,
   };
 }
 
 function getFallbackRevenueByApp(): AppMetrics[] {
   return [
-    { ad_unit_name: "JBM_Aria_768x1216", ad_unit_id: "1001", revenue_usd: 345.2, impressions: 25000, clicks: 120, ad_requests: 28000, fill_rate_pct: 89.2, ctr_pct: 0.48, ecpm_usd: 13.8, report_date: "2026-06-30", network_code: "22846411849" },
-    { ad_unit_name: "JBM_Aria_1024x768", ad_unit_id: "1002", revenue_usd: 210.8, impressions: 18000, clicks: 95, ad_requests: 21000, fill_rate_pct: 85.7, ctr_pct: 0.52, ecpm_usd: 11.7, report_date: "2026-06-30", network_code: "22846411849" }
+    {
+      ad_unit_name: "JBM_Aria_768x1216",
+      ad_unit_id: "1001",
+      revenue_usd: 0.098196,
+      impressions: 25000,
+      clicks: 1,
+      ad_requests: 0,
+      fill_rate_pct: 0,
+      ctr_pct: 0,
+      ecpm_usd: 0.003928,
+      report_date: "2026-06-30",
+      network_code: "22846411849",
+    },
   ];
 }
 
@@ -215,16 +269,38 @@ function getFallbackRevenueTrend(days: number): TrendDataPoint[] {
   for (let i = days; i >= 0; i--) {
     const d = new Date();
     d.setDate(now.getDate() - i);
-    const baseRev = 1000 + Math.random() * 400;
-    data.push({ report_date: d.toISOString().split("T")[0], revenue_usd: baseRev, impressions: baseRev * 80, ecpm_usd: 10 + Math.random() * 3 });
+    const baseRev = 0.3 + Math.random() * 0.2;
+    data.push({
+      report_date: d.toISOString().split("T")[0],
+      revenue_usd: baseRev,
+      impressions: baseRev * 200000,
+      ecpm_usd: 0.004 + Math.random() * 0.002,
+    });
   }
   return data;
 }
 
 function getFallbackAnomalies(): Anomaly[] {
-  return [{ ad_unit_name: "JBM_Savepe.in_336x280", today_revenue: 12.5, avg_revenue_7d: 45.2, drop_pct: 72.3, severity: "High", confidence: 0.95 }];
+  return [
+    {
+      ad_unit_name: "JBM_Savepe.in_336x280",
+      today_revenue: 0.012,
+      avg_revenue_7d: 0.045,
+      drop_pct: 72.3,
+      severity: "High",
+      confidence: 0.95,
+    },
+  ];
 }
 
 function getFallbackReportHistory(): ReportHistoryItem[] {
-  return [{ id: "1", name: "June Performance Review", date: "2026-06-30", status: "Completed", rows: 2450 }];
+  return [
+    {
+      id: "1",
+      name: "June Performance Review",
+      date: "2026-06-30",
+      status: "Completed",
+      rows: 2450,
+    },
+  ];
 }
