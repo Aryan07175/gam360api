@@ -98,7 +98,14 @@ class RevenueDB:
         log.info("DB connected — backend: %s", self.backend)
 
     def _cursor(self):
+        if self.backend == "postgres":
+            return self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         return self.conn.cursor()
+
+    @property
+    def _ph(self):
+        """Return the correct placeholder for the current backend."""
+        return "%s" if self.backend == "postgres" else "?"
 
     def init_schema(self):
         """Create tables if they don't exist."""
@@ -115,25 +122,38 @@ class RevenueDB:
 
     COL_MAP = {
         # GAM API column name (snake_case after normalisation) → DB column
+        # --- Dot-prefixed format (from CSV_DUMP download) ---
+        "dimension.ad_unit_name":                       "ad_unit_name",
+        "dimension.ad_unit_id":                         "ad_unit_id",
+        "column.ad_server_impressions":                 "impressions",
+        "column.ad_server_clicks":                      "clicks",
+        "column.ad_server_ad_requests":                 "ad_requests",
+        "column.ad_server_fill_rate":                   "fill_rate_pct",
+        "column.ad_server_ctr":                         "ctr_pct",
+        "column.ad_server_cpn_and_cpc_revenue":         "revenue_usd",
+        "column.ad_server_cpm_and_cpc_revenue":         "revenue_usd",
+        "column.ad_server_without_cpd_average_ecpm":    "ecpm_usd",
+        # --- Underscore-prefixed format (alternate normalisation) ---
         "dimension_ad_unit_name": "ad_unit_name",
-        "ad_unit_name":           "ad_unit_name",
         "dimension_ad_unit_id":   "ad_unit_id",
-        "ad_unit_id":             "ad_unit_id",
         "column_ad_server_impressions":         "impressions",
-        "ad_server_impressions":                "impressions",
         "column_ad_server_clicks":              "clicks",
-        "ad_server_clicks":                     "clicks",
         "column_ad_server_ad_requests":         "ad_requests",
-        "ad_server_ad_requests":                "ad_requests",
         "column_ad_server_fill_rate":           "fill_rate_pct",
-        "ad_server_fill_rate":                  "fill_rate_pct",
         "column_ad_server_ctr":                 "ctr_pct",
-        "ad_server_ctr":                        "ctr_pct",
         "column_ad_server_cpn_and_cpc_revenue": "revenue_usd",
-        "ad_server_cpn_and_cpc_revenue":        "revenue_usd",
         "column_ad_server_cpm_and_cpc_revenue": "revenue_usd",
-        "ad_server_cpm_and_cpc_revenue":        "revenue_usd",
         "column_ad_server_without_cpd_average_ecpm": "ecpm_usd",
+        # --- Plain names (no prefix) ---
+        "ad_unit_name":           "ad_unit_name",
+        "ad_unit_id":             "ad_unit_id",
+        "ad_server_impressions":                "impressions",
+        "ad_server_clicks":                     "clicks",
+        "ad_server_ad_requests":                "ad_requests",
+        "ad_server_fill_rate":                  "fill_rate_pct",
+        "ad_server_ctr":                        "ctr_pct",
+        "ad_server_cpn_and_cpc_revenue":        "revenue_usd",
+        "ad_server_cpm_and_cpc_revenue":        "revenue_usd",
         "ad_server_without_cpd_average_ecpm":        "ecpm_usd",
     }
 
@@ -241,7 +261,8 @@ class RevenueDB:
     ) -> list[dict]:
         """Revenue per app for a given date, sorted by revenue desc."""
         cur = self._cursor()
-        nc_filter = "AND network_code = ?" if network_code else ""
+        ph = self._ph
+        nc_filter = f"AND network_code = {ph}" if network_code else ""
         params: list = [report_date]
         if network_code:
             params.append(network_code)
@@ -253,9 +274,9 @@ class RevenueDB:
                    fill_rate_pct, ctr_pct, revenue_usd, ecpm_usd,
                    report_date, network_code
             FROM gam_revenue
-            WHERE report_date = ? {nc_filter}
+            WHERE report_date = {ph} {nc_filter}
             ORDER BY revenue_usd DESC NULLS LAST
-            LIMIT ?
+            LIMIT {ph}
         """
         cur.execute(sql, params)
         rows = cur.fetchall()
@@ -269,18 +290,19 @@ class RevenueDB:
     ) -> list[dict]:
         """Daily revenue trend for a single app over the last N days."""
         cur = self._cursor()
+        ph = self._ph
         params: list = [ad_unit_name, days]
         nc_filter = ""
         if network_code:
-            nc_filter = "AND network_code = ?"
+            nc_filter = f"AND network_code = {ph}"
             params.insert(1, network_code)
 
         sql = f"""
             SELECT report_date, revenue_usd, impressions, ecpm_usd
             FROM gam_revenue
-            WHERE ad_unit_name = ? {nc_filter}
+            WHERE ad_unit_name = {ph} {nc_filter}
             ORDER BY report_date DESC
-            LIMIT ?
+            LIMIT {ph}
         """
         cur.execute(sql, params)
         return [dict(r) for r in cur.fetchall()]
@@ -292,15 +314,16 @@ class RevenueDB:
     ) -> dict:
         """Total revenue + impressions across all apps for a date."""
         cur = self._cursor()
+        ph = self._ph
         params: list = [report_date]
         nc_filter = ""
         if network_code:
-            nc_filter = "AND network_code = ?"
+            nc_filter = f"AND network_code = {ph}"
             params.append(network_code)
 
         sql = f"""
             SELECT
-                report_date,
+                MIN(report_date)                   AS report_date,
                 COUNT(DISTINCT ad_unit_name)       AS app_count,
                 SUM(impressions)                   AS total_impressions,
                 SUM(clicks)                        AS total_clicks,
@@ -311,12 +334,12 @@ class RevenueDB:
                 MAX(ad_unit_name) FILTER (
                     WHERE revenue_usd = (
                         SELECT MAX(revenue_usd) FROM gam_revenue
-                        WHERE report_date = ? {nc_filter}
+                        WHERE report_date = {ph} {nc_filter}
                     )
                 )                                  AS top_app_name,
                 MAX(revenue_usd)                   AS top_app_revenue
             FROM gam_revenue
-            WHERE report_date = ? {nc_filter}
+            WHERE report_date = {ph} {nc_filter}
         """
         # params for subquery + outer query
         all_params = params + params
@@ -335,19 +358,28 @@ class RevenueDB:
         compared to their 7-day average.
         """
         cur = self._cursor()
-        sql = """
+        ph = self._ph
+
+        if self.backend == "postgres":
+            # PostgreSQL date arithmetic
+            date_expr = f"CAST({ph} AS DATE) - INTERVAL '1 day' * {ph}"
+        else:
+            # SQLite date arithmetic
+            date_expr = f"DATE({ph}, '-' || {ph} || ' days')"
+
+        sql = f"""
             WITH recent AS (
                 SELECT ad_unit_name,
                        AVG(revenue_usd) AS avg_revenue_7d
                 FROM gam_revenue
-                WHERE report_date >= DATE(?, '-' || ? || ' days')
-                  AND report_date < ?
+                WHERE report_date >= {date_expr}
+                  AND report_date < {ph}
                 GROUP BY ad_unit_name
             ),
             today AS (
                 SELECT ad_unit_name, revenue_usd AS today_revenue
                 FROM gam_revenue
-                WHERE report_date = ?
+                WHERE report_date = {ph}
             )
             SELECT t.ad_unit_name,
                    t.today_revenue,
@@ -358,7 +390,7 @@ class RevenueDB:
             FROM today t
             JOIN recent r ON t.ad_unit_name = r.ad_unit_name
             WHERE r.avg_revenue_7d > 0
-              AND (r.avg_revenue_7d - t.today_revenue) / r.avg_revenue_7d * 100 > ?
+              AND (r.avg_revenue_7d - t.today_revenue) / r.avg_revenue_7d * 100 > {ph}
             ORDER BY drop_pct DESC
         """
         cur.execute(
@@ -422,7 +454,7 @@ def main():
 
     if args.init:
         db.init_schema()
-        print("✓ Schema created.")
+        print("[OK] Schema created.")
 
     if args.summary:
         rows = db.get_revenue_by_app(args.summary)

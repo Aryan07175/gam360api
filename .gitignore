@@ -9,3 +9,7 @@ venv/
 env.bak/
 venv.bak/
 config/service_account.json
+config/.env
+*.db
+reports/output/*
+.DS_Store

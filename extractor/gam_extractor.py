@@ -99,7 +99,7 @@ class GAMRevenueExtractor:
             self.client.network_code = str(nc)
 
         self.network_code = self.client.network_code
-        log.info("GAM client initialised — network code: %s", self.network_code)
+        log.info("GAM client initialised - network code: %s", self.network_code)
 
     def _report_service(self):
         return self.client.GetService("ReportService", version=API_VERSION)
@@ -142,8 +142,6 @@ class GAMRevenueExtractor:
             "dateRangeType": "CUSTOM_DATE",
             "startDate": self._to_gam_date(start),
             "endDate": self._to_gam_date(end),
-            # Report in the network's local currency (matches dashboard)
-            "currencyCode": None,  # None = use network default
         }
 
         # Optional: filter to a specific ad unit (app) by its ID
@@ -165,12 +163,12 @@ class GAMRevenueExtractor:
 
         try:
             report_job = report_service.runReportJob(report_job)
-        except errors.AdManagerError as e:
+        except Exception as e:
             log.error("Failed to run report job: %s", e)
             raise
 
         job_id = report_job["id"]
-        log.info("Report job submitted — ID: %s", job_id)
+        log.info("Report job submitted - ID: %s", job_id)
         return job_id
 
     def wait_for_report(self, job_id: int, poll_interval: int = 10) -> bool:
@@ -281,7 +279,7 @@ class GAMRevenueExtractor:
         Full extraction: run report → wait → download → save.
         Returns the revenue DataFrame.
         """
-        log.info("Extracting revenue: %s → %s", start, end)
+        log.info("Extracting revenue: %s to %s", start, end)
 
         job_id = self.run_report(start, end, filter_ad_unit_id=filter_ad_unit_id)
 

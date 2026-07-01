@@ -420,7 +420,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 # ── entry point ────────────────────────────────────────────────────────────────
 
 async def main():
-    log.info("Starting GAM 360 Revenue MCP server …")
+    log.info("Starting GAM 360 Revenue MCP server ...")
     async with stdio_server() as (read_stream, write_stream):
         await app.run(
             read_stream,

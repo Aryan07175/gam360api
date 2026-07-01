@@ -36,7 +36,7 @@ from database.db import RevenueDB
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 log = logging.getLogger("pipeline")
@@ -48,10 +48,10 @@ NETWORK_CODE     = os.getenv("GAM_NETWORK_CODE", "")
 
 
 def run_pipeline(target_date: date, send_slack: bool = False):
-    log.info("═══ Pipeline start — date: %s ═══", target_date)
+    log.info("=== Pipeline start -- date: %s ===", target_date)
 
     # ── Step 1: Extract from GAM 360 SOAP API ─────────────────────────────────
-    log.info("[1/4] Extracting revenue from GAM 360 SOAP API …")
+    log.info("[1/4] Extracting revenue from GAM 360 SOAP API ...")
     extractor = GAMRevenueExtractor()
     df = extractor.extract_revenue(
         start=target_date,
@@ -62,7 +62,7 @@ def run_pipeline(target_date: date, send_slack: bool = False):
     log.info("      Extracted %d rows.", len(df))
 
     # ── Step 2: Query DB for summary ──────────────────────────────────────────
-    log.info("[2/4] Building summary from database …")
+    log.info("[2/4] Building summary from database ...")
     db = RevenueDB()
     rows      = db.get_revenue_by_app(str(target_date), limit=100)
     totals    = db.get_network_daily_total(str(target_date))
@@ -78,7 +78,7 @@ def run_pipeline(target_date: date, send_slack: bool = False):
     )
 
     # ── Step 3: Generate report file ──────────────────────────────────────────
-    log.info("[3/4] Writing report file …")
+    log.info("[3/4] Writing report file ...")
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
     lines = [
@@ -152,7 +152,7 @@ def run_pipeline(target_date: date, send_slack: bool = False):
     if send_slack and SLACK_WEBHOOK:
         _send_slack(target_date, total_rev, app_count, anomalies)
 
-    log.info("═══ Pipeline complete ═══")
+    log.info("=== Pipeline complete ===")
     return report_path
 
 
@@ -198,7 +198,7 @@ def main():
         target = datetime.strptime(args.date, "%Y-%m-%d").date()
 
     report_path = run_pipeline(target, send_slack=args.slack)
-    print(f"\n✓ Done. Report: {report_path}")
+    print(f"\n[OK] Done. Report: {report_path}")
 
 
 if __name__ == "__main__":

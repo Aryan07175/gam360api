@@ -1,15 +1,19 @@
 {
-  "_comment": "Add this to your Claude Desktop config at ~/Library/Application Support/Claude/claude_desktop_config.json",
+  "_comment": "Copy this file to %APPDATA%\\Claude\\claude_desktop_config.json and restart Claude Desktop",
   "mcpServers": {
     "gam360-revenue": {
-      "command": "python",
-      "args": ["/absolute/path/to/gam360-pipeline/mcp_server/server.py"],
+      "command": "C:\\Users\\Lenovo\\Desktop\\gam360-pipeline\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\Lenovo\\Desktop\\gam360-pipeline\\mcp_server\\server.py"
+      ],
       "env": {
-        "GAM_NETWORK_CODE": "YOUR_NETWORK_CODE_HERE",
-        "GAM_CREDENTIALS_PATH": "/absolute/path/to/gam360-pipeline/config/googleads.yaml",
+        "GAM_NETWORK_CODE": "22846411849",
+        "GAM_CREDENTIALS_PATH": "C:\\Users\\Lenovo\\Desktop\\gam360-pipeline\\config\\googleads.yaml",
         "DATABASE_URL": "postgresql://user:password@localhost:5432/gam_revenue",
         "GAM_API_VERSION": "v202602",
-        "ANOMALY_THRESHOLD_PCT": "20"
+        "ANOMALY_THRESHOLD_PCT": "20",
+        "REPORTS_OUTPUT_DIR": "C:\\Users\\Lenovo\\Desktop\\gam360-pipeline\\reports\\output",
+        "PYTHONIOENCODING": "utf-8"
       }
     }
   }
