@@ -34,50 +34,32 @@ export default function ReportsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
+  const load = async () => {
+    const data = await getReportHistory();
+    setHistory(data);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    async function load() {
-      const data = await getReportHistory();
-      setHistory(data);
-      setLoading(false);
-    }
     load();
   }, []);
 
+  useEffect(() => {
+    const hasActive = history.some(h => h.status === "Queued" || h.status === "Running");
+    if (!hasActive) return;
+    
+    const interval = setInterval(() => {
+      load();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [history]);
+
   const handleGenerate = async () => {
     setGenerating(true);
-    const result = await triggerReportGeneration({});
-    
-    setHistory((prev) => [
-      {
-        id: result.id,
-        name: "Custom Generation Request",
-        date: new Date().toISOString().split("T")[0],
-        status: "Queued",
-        rows: 0,
-      },
-      ...prev,
-    ]);
-
-    // Simulate transition to Running state
-    setTimeout(() => {
-      setGenerating(false);
-      setHistory((prev) =>
-        prev.map((item) =>
-          item.id === result.id ? { ...item, status: "Running" } : item
-        )
-      );
-
-      // Simulate transition to Completed state
-      setTimeout(() => {
-        setHistory((prev) =>
-          prev.map((item) =>
-            item.id === result.id
-              ? { ...item, status: "Completed", rows: Math.floor(Math.random() * 5000) + 100 }
-              : item
-          )
-        );
-      }, 3000);
-    }, 1500);
+    await triggerReportGeneration({});
+    await load();
+    setGenerating(false);
   };
 
   const StatusIcon = ({ status }: { status: string }) => {

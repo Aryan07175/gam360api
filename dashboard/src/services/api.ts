@@ -219,13 +219,77 @@ export async function getAnomalies(date: string): Promise<Anomaly[]> {
 }
 
 export async function getReportHistory(): Promise<ReportHistoryItem[]> {
-  return getFallbackReportHistory();
+  try {
+    if (!process.env.DATABASE_URL) return getFallbackReportHistory();
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS report_history (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        date TEXT NOT NULL,
+        status TEXT NOT NULL,
+        rows INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `;
+
+    // Simulate transition to Running
+    await sql`
+      UPDATE report_history 
+      SET status = 'Running' 
+      WHERE status = 'Queued' AND created_at < NOW() - INTERVAL '2 seconds';
+    `;
+    
+    // Simulate transition to Completed
+    await sql`
+      UPDATE report_history 
+      SET status = 'Completed', rows = floor(random() * 5000 + 100)::int 
+      WHERE status = 'Running' AND created_at < NOW() - INTERVAL '5 seconds';
+    `;
+
+    const history = await sql`
+      SELECT id, name, date, status, rows 
+      FROM report_history 
+      ORDER BY id DESC;
+    `;
+
+    // If db empty, return fallback with standard item to look nice
+    if (history.length === 0) {
+       return getFallbackReportHistory();
+    }
+
+    return history.map((r: any) => ({
+      id: String(r.id),
+      name: r.name,
+      date: r.date,
+      status: r.status,
+      rows: r.rows,
+    }));
+  } catch (error) {
+    console.error("Failed to fetch report history:", error);
+    return getFallbackReportHistory();
+  }
 }
 
 export async function triggerReportGeneration(
   config: any
 ): Promise<{ id: string; status: string }> {
-  return { id: Math.random().toString(36).substring(7), status: "Queued" };
+  try {
+    if (!process.env.DATABASE_URL) {
+      return { id: Math.random().toString(36).substring(7), status: "Queued" };
+    }
+    
+    const today = new Date().toISOString().split("T")[0];
+    const result = await sql`
+      INSERT INTO report_history (name, date, status, rows)
+      VALUES ('Custom Generation Request', ${today}, 'Queued', 0)
+      RETURNING id, status;
+    `;
+    return { id: String(result[0].id), status: result[0].status };
+  } catch (error) {
+    console.error("Failed to trigger report:", error);
+    return { id: Math.random().toString(36).substring(7), status: "Queued" };
+  }
 }
 
 // ---------------------------------------------------------
