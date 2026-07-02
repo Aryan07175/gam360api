@@ -9,34 +9,68 @@ for Claude-powered summarization and reporting.
 
 ---
 
-## 🌐 Dashboard — How It Works
+## 🏛️ System Architecture & Data Flow
 
-The dashboard is a **real-time analytics web application** that gives you a complete view of your Google Ad Manager 360 network performance. Here's what each section does:
+This project is a complete end-to-end analytics pipeline that pulls raw data from Google Ad Manager 360, stores it efficiently, and surfaces it in a real-time dashboard. 
 
-### Pages & Features
+Here is exactly how the data moves through the system and updates the UI:
 
-| Page | What It Shows |
-|------|--------------|
-| **Overview** | Network-wide KPIs — Total Revenue, Impressions, Clicks, eCPM, Fill Rate, Ad Requests, Top App. Plus 30-day trend charts for Revenue, Impressions, and eCPM. |
-| **Applications** | Per-app performance table with sortable columns (Revenue, Impressions, eCPM, Fill Rate, CTR). Searchable by app name. |
-| **Revenue Analytics** | Revenue & eCPM trend charts + top earning applications breakdown. |
-| **Anomaly Detection** | AI-driven anomaly detection comparing each app's daily revenue against its rolling 7-day average. Flags drops > 20% with severity levels (High / Medium / Low) and confidence scores. |
-| **System Alerts** | Live alert feed generated from real data — flags low impressions, low revenue, and poor fill rates across all ad units. |
-| **Reports** | Report generator with configurable date presets (Yesterday, Last 7 Days, Last 30 Days, This Month, Custom Range) and dimension selection. Tracks report status (Queued → Running → Completed) with CSV download. |
+### 1. Data Extraction (GAM API → PostgreSQL)
+* **The Extractor:** A Python script (`extractor/gam_extractor.py`) connects to the **Google Ad Manager 360 SOAP API**. It builds a specific `ReportQuery` to fetch daily revenue, impressions, and eCPM on a per-app (Ad Unit) basis.
+* **The Database:** The extracted CSV reports are parsed and immediately upserted into a **Neon serverless PostgreSQL** database. The script ensures no duplicates exist using composite unique keys (`network_code`, `report_date`, `ad_unit_id`).
+* **Automation:** A cron job runs this script automatically every day to keep the database synced with GAM's latest finalized numbers.
 
-### Global Date Picker
+### 2. Dashboard State Management (React Context)
+* **Global Context:** The Next.js dashboard uses a global `DateContext` (React Context API) to manage the state of the entire application from a single source of truth.
+* **Auto-Discovery:** When the dashboard loads, it pings the database via Next.js Server Actions to discover **all available dates** that actually contain data. It does not blindly guess dates—if the GAM extractor hasn't pulled data for a day, the dashboard knows about it.
+* **Reactivity:** Every chart, table, and metric on every page subscribes to this `DateContext`. When the selected date changes, the context updates, and **all components instantly re-fetch their specific data** and re-render simultaneously.
 
-The header contains an **interactive date picker** that controls all pages simultaneously:
-- Click the date button to open a dropdown with a calendar input and quick-select shortcuts
-- Navigate between days using ← / → arrow buttons
-- A **LIVE** badge appears when viewing the latest available date from the database
-- Changing the date instantly reloads data on every page
+### 3. Live Updates & Auto-Refresh
+* **Polling:** The `DateContext` runs a silent background timer (`setInterval`) that polls the database every **5 minutes**.
+* **Seamless Refresh:** If the cron job pushes new GAM data into PostgreSQL while you have the dashboard open, the auto-refresh mechanism detects it. It bumps a `refreshKey` state variable, which instantly triggers all active charts and tables to seamlessly pull the fresh data without requiring a full page reload.
 
-### Live Data & Auto-Refresh
+```mermaid
+sequenceDiagram
+    participant GAM as Google Ad Manager
+    participant Extractor as Python Extractor
+    participant DB as Neon PostgreSQL
+    participant Context as Next.js DateContext
+    participant UI as Dashboard Components
 
-- **Auto-refresh**: The dashboard automatically polls for new data every 5 minutes
-- **Manual refresh**: Click the Refresh button in the header to immediately fetch the latest data from PostgreSQL
-- **Export**: One-click CSV export of the current day's revenue data for all ad units
+    loop Daily Cron
+        Extractor->>GAM: Request Report (SOAP API)
+        GAM-->>Extractor: Download CSV
+        Extractor->>DB: Upsert Revenue Rows
+    end
+
+    loop Every 5 Minutes (Auto-Refresh)
+        Context->>DB: Poll for latest available dates
+        DB-->>Context: Return available dates array
+        Context->>Context: Update global state & refreshKey
+        Context->>UI: Trigger re-render
+        UI->>DB: Fetch component-specific data (Server Actions)
+        DB-->>UI: Return fresh data
+    end
+```
+
+---
+
+## 🌐 Dashboard Features
+
+The dashboard is built to mimic and enhance the GAM 360 experience:
+
+### Core Pages
+* **Overview:** Network-wide KPIs (Total Revenue, Impressions, Clicks, eCPM, Fill Rate, Ad Requests) and 30-day trend charts.
+* **Applications:** Per-app performance table with sortable columns and search functionality.
+* **Revenue Analytics:** Revenue & eCPM trend charts with a top earning applications breakdown.
+* **Anomaly Detection:** AI-driven anomaly detection comparing each app's daily revenue against its rolling 7-day average. Flags sudden drops > 20% with severity levels.
+* **System Alerts:** Live alert feed flagging low impressions, low revenue, and poor fill rates across all ad units.
+* **Reports:** Advanced report generator with configurable date presets (Yesterday, Last 7 Days, This Month, Custom Range). Tracks generation status and provides direct CSV downloads.
+
+### Interactive UI
+* **Database-Aware Date Picker:** The header calendar strictly limits selection to dates that actually exist in the database. The left/right arrows smartly skip over days with no data.
+* **Dark Mode:** Full support for system-preference or manual light/dark themes.
+* **Instant Export:** One-click CSV export of the current day's revenue data.
 
 ---
 
