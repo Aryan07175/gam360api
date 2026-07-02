@@ -4,30 +4,28 @@ import { useEffect, useState } from "react";
 import { DollarSign, MousePointerClick, Eye, Activity, Percent, ArrowRightLeft, AlertCircle } from "lucide-react";
 import { KPICard } from "@/components/cards/kpi-card";
 import { TrendChart } from "@/components/charts/trend-chart";
-import { getNetworkTotal, getRevenueTrend, getLatestReportDate } from "@/services/api";
+import { getNetworkTotal, getRevenueTrend } from "@/services/api";
 import { NetworkTotal, TrendDataPoint } from "@/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useDateContext } from "@/contexts/DateContext";
+import { format, parseISO } from "date-fns";
 
 export default function DashboardOverview() {
+  const { selectedDate, dateLoading, refreshKey } = useDateContext();
   const [total, setTotal] = useState<NetworkTotal | null>(null);
   const [trend, setTrend] = useState<TrendDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [noData, setNoData] = useState(false);
-  const [dataDate, setDataDate] = useState<string | null>(null);
 
   useEffect(() => {
+    if (dateLoading || !selectedDate) return;
+
     async function loadData() {
       setLoading(true);
       setNoData(false);
 
-      // Step 1: Determine the latest date with actual data in Postgres
-      const latestDate = await getLatestReportDate();
-      const dateToQuery = latestDate || new Date().toISOString().split("T")[0];
-      setDataDate(latestDate);
-
-      // Step 2: Fetch data for that date
       const [totalData, trendData] = await Promise.all([
-        getNetworkTotal(dateToQuery),
+        getNetworkTotal(selectedDate!),
         getRevenueTrend(30),
       ]);
 
@@ -36,11 +34,15 @@ export default function DashboardOverview() {
       }
 
       setTotal(totalData);
-      setTrend(trendData.reverse()); // Chronological order
+      setTrend(trendData.reverse());
       setLoading(false);
     }
     loadData();
-  }, []);
+  }, [selectedDate, dateLoading, refreshKey]);
+
+  const displayDate = selectedDate
+    ? format(parseISO(selectedDate), "MMM dd, yyyy")
+    : null;
 
   return (
     <div className="space-y-6">
@@ -48,9 +50,9 @@ export default function DashboardOverview() {
         <h2 className="text-2xl font-bold tracking-tight">Overview</h2>
         <p className="text-muted-foreground">
           Monitor your network&apos;s high-level metrics and trends.
-          {dataDate && (
+          {displayDate && (
             <span className="ml-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              • Showing data for {dataDate}
+              • Showing data for {displayDate}
             </span>
           )}
         </p>
@@ -60,11 +62,11 @@ export default function DashboardOverview() {
       {noData && !loading && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>No data available</AlertTitle>
+          <AlertTitle>No data available for {displayDate}</AlertTitle>
           <AlertDescription>
-            No revenue data was found in the database for the selected date. 
-            This typically means the GAM pipeline has not yet synced data for this day. 
-            Try running the pipeline or selecting a different date.
+            No revenue data was found in the database for this date.
+            This typically means the GAM pipeline has not yet synced data for this day.
+            Try selecting a different date using the date picker in the header.
           </AlertDescription>
         </Alert>
       )}
@@ -105,8 +107,7 @@ export default function DashboardOverview() {
           loading={loading}
           subtitle={noData ? "No data for this date" : undefined}
         />
-        
-        {/* ISSUE 2 FIX: Fill Rate shows N/A when null instead of 0.0% */}
+
         <KPICard
           title="Fill Rate"
           value={

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAnomalies, getLatestReportDate } from "@/services/api";
+import { getAnomalies } from "@/services/api";
 import { Anomaly } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,30 +13,38 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertTriangle, TrendingDown, TrendingUp, Loader2, Info } from "lucide-react";
+import { AlertTriangle, TrendingDown, Loader2, Info } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useDateContext } from "@/contexts/DateContext";
+import { format, parseISO } from "date-fns";
 
 export default function AnomaliesPage() {
+  const { selectedDate, dateLoading, refreshKey } = useDateContext();
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (dateLoading || !selectedDate) return;
+
     async function load() {
-      const latestDate = await getLatestReportDate();
-      const dateToQuery = latestDate || new Date().toISOString().split("T")[0];
-      const data = await getAnomalies(dateToQuery);
+      setLoading(true);
+      const data = await getAnomalies(selectedDate!);
       setAnomalies(data);
       setLoading(false);
     }
     load();
-  }, []);
+  }, [selectedDate, dateLoading, refreshKey]);
 
   const getSeverityBadge = (severity: string) => {
     switch (severity) {
       case "High":
         return <Badge variant="destructive">High</Badge>;
       case "Medium":
-        return <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300">Medium</Badge>;
+        return (
+          <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300">
+            Medium
+          </Badge>
+        );
       case "Low":
         return <Badge variant="outline" className="text-muted-foreground">Low</Badge>;
       default:
@@ -44,12 +52,19 @@ export default function AnomaliesPage() {
     }
   };
 
+  const displayDate = selectedDate ? format(parseISO(selectedDate), "MMM dd, yyyy") : "";
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Anomaly Detection</h2>
         <p className="text-muted-foreground">
           AI-driven detection of revenue spikes, drops, and unusual patterns.
+          {displayDate && (
+            <span className="ml-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              • {displayDate}
+            </span>
+          )}
         </p>
       </div>
 
@@ -57,7 +72,7 @@ export default function AnomaliesPage() {
         <Info className="h-4 w-4" />
         <AlertTitle>How it works</AlertTitle>
         <AlertDescription>
-          The system compares yesterday's performance against a rolling 7-day moving average.
+          The system compares the selected date&apos;s performance against a rolling 7-day moving average.
           Statistical outliers are flagged automatically based on standard deviation thresholds.
         </AlertDescription>
       </Alert>
@@ -65,7 +80,10 @@ export default function AnomaliesPage() {
       <Card>
         <CardHeader>
           <CardTitle>Detected Anomalies</CardTitle>
-          <CardDescription>Found {anomalies.length} potential issues requiring attention.</CardDescription>
+          <CardDescription>
+            Found {anomalies.length} potential issue{anomalies.length !== 1 ? "s" : ""} requiring attention
+            {displayDate ? ` for ${displayDate}` : ""}.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -73,7 +91,7 @@ export default function AnomaliesPage() {
               <TableRow>
                 <TableHead>Ad Unit / Entity</TableHead>
                 <TableHead>Severity</TableHead>
-                <TableHead className="text-right">Today's Revenue</TableHead>
+                <TableHead className="text-right">Today&apos;s Revenue</TableHead>
                 <TableHead className="text-right">7D Average</TableHead>
                 <TableHead className="text-right">Deviation</TableHead>
                 <TableHead className="text-right">AI Confidence</TableHead>
@@ -89,7 +107,7 @@ export default function AnomaliesPage() {
               ) : anomalies.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                    No anomalies detected today. All systems normal.
+                    No anomalies detected for this date. All systems normal.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -103,10 +121,10 @@ export default function AnomaliesPage() {
                     </TableCell>
                     <TableCell>{getSeverityBadge(item.severity)}</TableCell>
                     <TableCell className="text-right font-medium text-red-500">
-                      ${item.today_revenue.toFixed(2)}
+                      ${item.today_revenue.toFixed(4)}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
-                      ${item.avg_revenue_7d.toFixed(2)}
+                      ${item.avg_revenue_7d.toFixed(4)}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end text-red-500">

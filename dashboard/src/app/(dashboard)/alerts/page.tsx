@@ -1,25 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSystemAlerts, getLatestReportDate } from "@/services/api";
+import { getSystemAlerts } from "@/services/api";
 import { SystemAlert } from "@/types";
-import { Loader2, Bell, AlertTriangle, AlertCircle, Info, Settings2 } from "lucide-react";
+import { Loader2, Bell, AlertTriangle, AlertCircle, Info, Settings2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useDateContext } from "@/contexts/DateContext";
+import { format, parseISO } from "date-fns";
 
 export default function AlertsPage() {
+  const { selectedDate, dateLoading, refreshKey, refresh, refreshing } = useDateContext();
   const [alerts, setAlerts] = useState<SystemAlert[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (dateLoading || !selectedDate) return;
+
     async function load() {
-      const latestDate = await getLatestReportDate();
-      const dateToQuery = latestDate || new Date().toISOString().split("T")[0];
-      const data = await getSystemAlerts(dateToQuery);
+      setLoading(true);
+      const data = await getSystemAlerts(selectedDate!);
       setAlerts(data);
       setLoading(false);
     }
     load();
-  }, []);
+  }, [selectedDate, dateLoading, refreshKey]);
 
   const getAlertIcon = (severity: string) => {
     switch (severity) {
@@ -50,6 +54,8 @@ export default function AlertsPage() {
     }
   };
 
+  const displayDate = selectedDate ? format(parseISO(selectedDate), "MMM dd, yyyy") : "";
+
   return (
     <div className="space-y-8 pb-10">
       <div className="flex items-center justify-between">
@@ -57,14 +63,31 @@ export default function AlertsPage() {
           <h2 className="text-3xl font-bold tracking-tight">System Alerts</h2>
           <p className="text-muted-foreground mt-1">
             AI-detected anomalies and critical system warnings.
+            {displayDate && (
+              <span className="ml-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                • {displayDate}
+              </span>
+            )}
           </p>
         </div>
-        <div className="flex items-center text-sm font-medium text-emerald-600 dark:text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-900/50">
-          <span className="relative flex h-2 w-2 mr-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          Live from local server
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refresh}
+            disabled={refreshing}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </Button>
+          <div className="flex items-center text-sm font-medium text-emerald-600 dark:text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-900/50">
+            <span className="relative flex h-2 w-2 mr-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            Live from local server
+          </div>
         </div>
       </div>
 
@@ -78,7 +101,7 @@ export default function AlertsPage() {
             <Settings2 className="h-4 w-4" />
           </Button>
         </div>
-        
+
         <div className="px-6 py-2 bg-muted/10">
           <p className="text-sm text-muted-foreground">Items requiring immediate attention</p>
         </div>
@@ -91,12 +114,12 @@ export default function AlertsPage() {
           ) : alerts.length === 0 ? (
             <div className="flex h-40 items-center justify-center flex-col text-muted-foreground">
               <Bell className="h-10 w-10 mb-4 opacity-20" />
-              <p>No active alerts at this time.</p>
+              <p>No active alerts for {displayDate || "this date"}.</p>
             </div>
           ) : (
             alerts.map((alert) => (
-              <div 
-                key={alert.id} 
+              <div
+                key={alert.id}
                 className="group flex flex-col sm:flex-row sm:items-center justify-between p-6 transition-colors hover:bg-muted/50"
               >
                 <div className="flex items-start space-x-4">
@@ -111,7 +134,12 @@ export default function AlertsPage() {
                   </div>
                 </div>
                 <div className="mt-4 sm:mt-0 flex items-center space-x-3 sm:ml-4 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                  <Button variant="outline" size="sm" className="h-9 px-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-4"
+                    onClick={() => setAlerts((prev) => prev.filter((a) => a.id !== alert.id))}
+                  >
                     Dismiss
                   </Button>
                   <Button size="sm" className="h-9 px-4 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">

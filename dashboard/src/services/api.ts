@@ -272,17 +272,39 @@ export async function getReportHistory(): Promise<ReportHistoryItem[]> {
 }
 
 export async function triggerReportGeneration(
-  config: any
+  config: {
+    datePreset?: string;
+    startDate?: string;
+    endDate?: string;
+    dimensions?: string;
+  }
 ): Promise<{ id: string; status: string }> {
   try {
+    const today = new Date().toISOString().split("T")[0];
+    const startDate = config.startDate || today;
+    const endDate = config.endDate || today;
+
+    // Build a human-readable report name from the preset/range
+    const presetLabels: Record<string, string> = {
+      yesterday: "Yesterday",
+      last7days: "Last 7 Days",
+      last30days: "Last 30 Days",
+      thismonth: "This Month",
+      custom: `${startDate} to ${endDate}`,
+    };
+    const rangeLabel = config.datePreset && presetLabels[config.datePreset]
+      ? presetLabels[config.datePreset]
+      : `${startDate} to ${endDate}`;
+    const dimLabel = config.dimensions ? ` [${config.dimensions.toUpperCase()}]` : "";
+    const reportName = `GAM Report – ${rangeLabel}${dimLabel}`;
+
     if (!process.env.DATABASE_URL) {
       return { id: Math.random().toString(36).substring(7), status: "Queued" };
     }
-    
-    const today = new Date().toISOString().split("T")[0];
+
     const result = await sql`
       INSERT INTO report_history (name, date, status, rows)
-      VALUES ('Custom Generation Request', ${today}, 'Queued', 0)
+      VALUES (${reportName}, ${startDate}, 'Queued', 0)
       RETURNING id, status;
     `;
     return { id: String(result[0].id), status: result[0].status };
