@@ -1,4 +1,4 @@
-"use server";
+// Browser-compatible API client
 import {
   BISummaryKPI,
   BIAppRow,

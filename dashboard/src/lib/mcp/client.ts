@@ -2,13 +2,14 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import * as EventSourcePolyfill from "eventsource"; // Polyfill for Node.js if needed
 
-// In Node.js 18+, EventSource might be natively available, but we import it just in case
-if (typeof global.EventSource === "undefined") {
+// In Node.js 18+, EventSource might be natively available.
+// In the browser, window.EventSource is always available.
+if (typeof window === "undefined" && typeof global !== "undefined" && typeof global.EventSource === "undefined") {
     // @ts-ignore
     global.EventSource = EventSourcePolyfill.default || EventSourcePolyfill;
 }
 
-const MCP_SERVER_URL = process.env.MCP_SERVER_URL || "http://127.0.0.1:8000/sse";
+const MCP_SERVER_URL = process.env.NEXT_PUBLIC_MCP_SERVER_URL || process.env.MCP_SERVER_URL || "http://127.0.0.1:8000/sse";
 
 let mcpClient: Client | null = null;
 
