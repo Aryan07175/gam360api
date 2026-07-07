@@ -28,9 +28,9 @@ interface TrendChartProps {
   valueSuffix?: string;
 }
 
-// Slate-400 — readable on both dark and light card backgrounds
-const TICK_COLOR = "#94a3b8";
-const TICK_STYLE = { fill: TICK_COLOR, fontSize: 11, fontWeight: 500 };
+// Colors
+const X_TICK_COLOR = "#94a3b8"; // slate-400 for date labels
+const Y_TICK_COLOR = "#60a5fa"; // blue-400 — vibrant, always visible on dark bg
 
 // Shorten "2026-06-30" → "06/30" for compact X-axis labels
 function formatDate(dateStr: string): string {
@@ -38,6 +38,38 @@ function formatDate(dateStr: string): string {
   const parts = String(dateStr).split("-");
   if (parts.length === 3) return `${parts[1]}/${parts[2]}`;
   return dateStr;
+}
+
+// Custom X-axis tick: renders the date label as slate-400 SVG text
+function XTick({ x, y, payload }: any) {
+  return (
+    <text
+      x={x}
+      y={y + 10}
+      textAnchor="middle"
+      fill={X_TICK_COLOR}
+      fontSize={11}
+      fontWeight={500}
+    >
+      {formatDate(String(payload?.value ?? ""))}
+    </text>
+  );
+}
+
+// Custom Y-axis tick: renders value labels as blue-400 SVG text
+function YTick({ x, y, payload, valuePrefix, valueSuffix }: any) {
+  return (
+    <text
+      x={x - 4}
+      y={y + 4}
+      textAnchor="end"
+      fill={Y_TICK_COLOR}
+      fontSize={11}
+      fontWeight={600}
+    >
+      {`${valuePrefix}${Number(payload?.value ?? 0).toLocaleString()}${valueSuffix}`}
+    </text>
+  );
 }
 
 export function TrendChart({
@@ -77,27 +109,21 @@ export function TrendChart({
                 stroke="rgba(148,163,184,0.15)"
               />
 
-              {/* X Axis — tick.fill controls label text color */}
+              {/* X Axis — custom tick component renders date labels in slate-400 */}
               <XAxis
                 dataKey={xAxisKey}
                 tickLine={false}
                 axisLine={false}
-                dy={8}
-                tick={TICK_STYLE}
-                tickFormatter={formatDate}
+                tick={<XTick />}
                 interval="preserveStartEnd"
               />
 
-              {/* Y Axis — tick.fill controls label text color */}
+              {/* Y Axis — custom tick component renders value labels in blue-400 */}
               <YAxis
                 tickLine={false}
                 axisLine={false}
-                tick={TICK_STYLE}
-                width={62}
-                dx={-4}
-                tickFormatter={(value) =>
-                  `${valuePrefix}${Number(value).toLocaleString()}${valueSuffix}`
-                }
+                tick={<YTick valuePrefix={valuePrefix} valueSuffix={valueSuffix} />}
+                width={66}
               />
 
               <Tooltip
@@ -108,7 +134,7 @@ export function TrendChart({
                   boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
                   padding: "10px 14px",
                 }}
-                labelStyle={{ color: TICK_COLOR, fontSize: 12, marginBottom: 4 }}
+                labelStyle={{ color: X_TICK_COLOR, fontSize: 12, marginBottom: 4 }}
                 itemStyle={{ color: color, fontWeight: 600, fontSize: 13 }}
                 labelFormatter={(label) => formatDate(label)}
                 formatter={(value: any) => [
