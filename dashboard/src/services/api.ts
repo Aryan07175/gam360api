@@ -1,6 +1,4 @@
 "use server";
-
-export const maxDuration = 60; // Set max duration to 60s for Vercel (Hobby limit is 60s max)
 import {
   AppMetrics,
   NetworkTotal,
